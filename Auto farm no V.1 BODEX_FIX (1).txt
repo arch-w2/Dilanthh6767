@@ -1,0 +1,312 @@
+
+-- BLOCK SPIN | AUTO COOK
+-- GREEN ZONE + BOTON FINALIZAR
+
+local WindUI = loadstring(game:HttpGet(
+    "https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"
+))()
+
+-- SERVICIOS
+local Players = game:GetService("Players")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+-- ESTADO
+local State = {
+    AutoCook = false,
+    FinishedThisCook = false
+}
+
+local STEAK_NAMES = {
+    "Steak",
+    "BronzeSteak",
+    "SilverSteak",
+    "GoldenSteak",
+    "DiamondSteak"
+}
+
+-- FUNCIONES
+local function getChar()
+    return LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+end
+
+local function getHRP()
+    return getChar():FindFirstChild("HumanoidRootPart")
+end
+
+local function getHum()
+    return getChar():FindFirstChildOfClass("Humanoid")
+end
+
+local function dist(pos)
+    local hrp = getHRP()
+    if not hrp then return 999999 end
+    return (hrp.Position - pos).Magnitude
+end
+
+local function walkTo(pos)
+    local hum = getHum()
+    if not hum then return end
+
+    hum:MoveTo(pos)
+
+    local timeout = 0
+
+    while State.AutoCook and dist(pos) > 4 and timeout < 80 do
+        task.wait(0.1)
+        timeout += 1
+    end
+end
+
+local function pressE()
+    pcall(function()
+        VirtualInputManager:SendKeyEvent(
+            true, Enum.KeyCode.E, false, game
+        )
+        task.wait(0.08)
+        VirtualInputManager:SendKeyEvent(
+            false, Enum.KeyCode.E, false, game
+        )
+    end)
+end
+
+local function getFoodTool()
+    local bp = LocalPlayer:FindFirstChildOfClass("Backpack")
+    local char = getChar()
+
+    for _, name in ipairs(STEAK_NAMES) do
+        if bp and bp:FindFirstChild(name) then
+            return bp:FindFirstChild(name)
+        end
+
+        if char:FindFirstChild(name) then
+            return char:FindFirstChild(name)
+        end
+    end
+
+    return nil
+end
+
+-- ACEPTAR TRABAJO
+local function acceptCookJob()
+    for _, btn in ipairs(PlayerGui:GetDescendants()) do
+        if btn:IsA("TextButton") and btn.Visible then
+            local txt = btn.Text:lower()
+
+            if txt:find("cook") or txt:find("accept") then
+                pcall(function()
+                    firesignal(btn.MouseButton1Click)
+                end)
+                return
+            end
+        end
+    end
+end
+
+-- DETECTAR GREEN ZONE
+-- Compara el CENTRO del indicador móvil con los límites de la zona verde.
+local function isInGreenZone(progress)
+    if not progress or not progress.Visible then
+        return false
+    end
+
+    local main = progress:FindFirstChild("MainFrame", true)
+    if not main then return false end
+
+    local indicator = main:FindFirstChild("BarAmount", true)
+    if not indicator or not indicator:IsA("GuiObject") then
+        return false
+    end
+
+    local indicatorCenterX =
+        indicator.AbsolutePosition.X + (indicator.AbsoluteSize.X / 2)
+    local indicatorCenterY =
+        indicator.AbsolutePosition.Y + (indicator.AbsoluteSize.Y / 2)
+
+    for _, obj in ipairs(main:GetDescendants()) do
+        if obj:IsA("GuiObject")
+        and obj.Visible
+        and obj ~= indicator
+        and obj.AbsoluteSize.X > 2
+        and obj.AbsoluteSize.Y > 2 then
+
+            -- Detecta tonos verdes tanto en BackgroundColor3 como ImageColor3.
+            local color = obj.BackgroundColor3
+            local isGreen =
+                color.G > 0.42
+                and color.G > color.R * 1.18
+                and color.G > color.B * 1.08
+
+            if obj:IsA("ImageLabel") or obj:IsA("ImageButton") then
+                local imageColor = obj.ImageColor3
+                if imageColor.G > 0.42
+                and imageColor.G > imageColor.R * 1.18
+                and imageColor.G > imageColor.B * 1.08 then
+                    isGreen = true
+                end
+            end
+
+            if isGreen then
+                local left = obj.AbsolutePosition.X
+                local right = left + obj.AbsoluteSize.X
+                local top = obj.AbsolutePosition.Y
+                local bottom = top + obj.AbsoluteSize.Y
+
+                -- El centro del indicador debe estar dentro de la zona,
+                -- no solamente su borde derecho.
+                if indicatorCenterX >= left
+                and indicatorCenterX <= right
+                and indicatorCenterY >= top - 8
+                and indicatorCenterY <= bottom + 8 then
+                    return true
+                end
+            end
+        end
+    end
+
+    return false
+end
+
+-- PULSAR FINALIZAR
+local function pressFinishButton()
+    for _, obj in ipairs(PlayerGui:GetDescendants()) do
+        if (obj:IsA("TextButton") or obj:IsA("ImageButton"))
+        and obj.Visible then
+
+            local txt = ""
+
+            if obj:IsA("TextButton") then
+                txt = obj.Text:lower()
+            end
+
+            if txt:find("finalizar", 1, true)
+            or txt:find("finish", 1, true)
+            or txt:find("complete", 1, true) then
+                pcall(function()
+                    firesignal(obj.MouseButton1Click)
+                end)
+
+                return true
+            end
+        end
+    end
+
+    return false
+end
+
+-- AUTO COCINAR
+local function cookLoop()
+    if not State.AutoCook then return end
+
+    local job = LocalPlayer:GetAttribute("Job") or ""
+
+    -- 1. CONSEGUIR TRABAJO
+    if not job:lower():find("cook") then
+        local jobPos = Vector3.new(-234.56, 256.22, 339.08)
+
+        if dist(jobPos) > 6 then
+            walkTo(jobPos)
+        else
+            acceptCookJob()
+            task.wait(0.8)
+        end
+
+        return
+    end
+
+    -- 2. DETECTAR BARRA
+    local progress
+
+    pcall(function()
+        progress = PlayerGui.ProgressBar.ProgressBarFrame
+    end)
+
+    local tool = getFoodTool()
+
+    -- 3. RECOGER CARNE
+    if not tool and not (progress and progress.Visible) then
+        local pickupPos = Vector3.new(-279.16, 256.22, 335.14)
+
+        if dist(pickupPos) > 5 then
+            walkTo(pickupPos)
+        else
+            pressE()
+            task.wait(0.4)
+        end
+
+        return
+    end
+
+    -- 4. EQUIPAR CARNE
+    local bp = LocalPlayer:FindFirstChildOfClass("Backpack")
+    local hum = getHum()
+
+    if tool and tool.Parent == bp and hum then
+        hum:EquipTool(tool)
+        task.wait(0.2)
+    end
+
+    -- 5. IR AL GRILL
+    local beacon = workspace:FindFirstChild("Beacon")
+
+    if beacon and beacon.PrimaryPart then
+        if dist(beacon.PrimaryPart.Position) > 5 then
+            walkTo(beacon.PrimaryPart.Position)
+        end
+    end
+
+    -- 6. GREEN ZONE + FINALIZAR
+    if progress and progress.Visible then
+        if not State.FinishedThisCook then
+            if isInGreenZone(progress) then
+                local clicked = pressFinishButton()
+
+                if clicked then
+                    State.FinishedThisCook = true
+                end
+            end
+        end
+    else
+        State.FinishedThisCook = false
+    end
+end
+
+-- BUCLE PRINCIPAL
+task.spawn(function()
+    while true do
+        if State.AutoCook then
+            pcall(cookLoop)
+        end
+
+        task.wait(0.05)
+    end
+end)
+
+-- INTERFAZ WINDUI
+local Window = WindUI:CreateWindow({
+    Title = "Block Spin | Cocinero",
+    Icon = "utensils",
+    Author = "PEEPAPIG",
+    Folder = "BlockSpinHub",
+    Size = UDim2.fromOffset(540, 320),
+    Transparent = true,
+    Theme = "Dark"
+})
+
+local FarmingTab = Window:Tab({
+    Title = "Farming",
+    Icon = "flame"
+})
+
+FarmingTab:Toggle({
+    Title = "Auto Cocinar",
+    Desc = "Detecta Green Zone y pulsa Finalizar",
+    Value = false,
+
+    Callback = function(value)
+        State.AutoCook = value
+        State.FinishedThisCook = false
+    end
+})
