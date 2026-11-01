@@ -1,6 +1,6 @@
 
--- BLOCK SPIN | AUTO COOK
--- GREEN ZONE + BOTON FINALIZAR
+-- BLOCK SPIN | AUTO FARM
+-- ACTULIZADO
 
 local WindUI = loadstring(game:HttpGet(
     "https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"
@@ -286,9 +286,9 @@ end)
 
 -- INTERFAZ WINDUI
 local Window = WindUI:CreateWindow({
-    Title = "Block Spin | Cocinero",
+    Title = "Block Spin | Farm",
     Icon = "utensils",
-    Author = "PEEPAPIG",
+    Author = "by Vodex",
     Folder = "BlockSpinHub",
     Size = UDim2.fromOffset(540, 320),
     Transparent = true,
@@ -301,8 +301,8 @@ local FarmingTab = Window:Tab({
 })
 
 FarmingTab:Toggle({
-    Title = "Auto Cocinar",
-    Desc = "Detecta Green Zone y pulsa Finalizar",
+    Title = "Auto Farm Cocina",
+    Desc = "AUTO FARMEA",
     Value = false,
 
     Callback = function(value)
